@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — FairPlay Cricket AI{% endblock %}
+{% block topbar_title %}📊 Dashboard{% endblock %}
+{% block topbar_actions %}
+  <span class="badge badge-live">🔴 {{ live_count }} Live</span>
+{% endblock %}
+{% block content %}
+<div class="stats-grid">
+  <div class="stat-card" style="--accent-color:#39d353">
+    <div class="stat-icon">🏏</div>
+    <div class="stat-value" id="live-count">{{ live_count }}</div>
+    <div class="stat-label">Live Matches</div>
+  </div>
+  <div class="stat-card" style="--accent-color:#388bfd">
+    <div class="stat-icon">👥</div>
+    <div class="stat-value">{{ user_count }}</div>
+    <div class="stat-label">Registered Users</div>
+  </div>
+  <div class="stat-card" style="--accent-color:#d29922">
+    <div class="stat-icon">⚠️</div>
+    <div class="stat-value">{{ alerts|length }}</div>
+    <div class="stat-label">Active Alerts</div>
+  </div>
+  <div class="stat-card" style="--accent-color:#a371f7">
+    <div class="stat-icon">🎯</div>
+    <div class="stat-value">{{ matches|length }}</div>
+    <div class="stat-label">Total Matches</div>
+  </div>
+</div>
+
+<div class="grid-2" style="gap:24px;margin-bottom:24px;">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🏟️ Matches</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm btn-outline filter-btn active" data-filter="all">All</button>
+        <button class="btn btn-sm btn-outline filter-btn" data-filter="live">Live</button>
+        <button class="btn btn-sm btn-outline filter-btn" data-filter="completed">Done</button>
+      </div>
+    </div>
+    <div id="matches-list" style="display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;">
+      {% for m in matches %}
+      <a href="/match/{{ m.id }}" class="match-card" data-status="{{ m.status }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span class="badge badge-{{ m.status }}">{{ m.status|upper }}</span>
+          <span class="text-xs text-muted">{{ m.overs }} ov</span>
+        </div>
+        <div class="match-teams">{{ m.team_a }} <span style="color:var(--text-muted);font-weight:400">vs</span> {{ m.team_b }}</div>
+        <div class="match-venue">📍 {{ m.venue or 'Venue TBD' }}</div>
+        {% if m.winner %}<div style="margin-top:6px;font-size:0.78rem;color:var(--green-accent);">🏆 Won by {{ m.winner }}</div>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🚨 AI Alerts</span>
+      <span class="card-action" onclick="location.reload()">Refresh</span>
+    </div>
+    <div style="max-height:420px;overflow-y:auto;">
+      {% if alerts %}
+        {% for a in alerts %}
+        <div class="alert-item">
+          <div class="alert-icon {{ a.severity }}">
+            {% if a.alert_type == 'no_ball' %}🦶{% elif a.alert_type == 'suspicious_scoring' %}📈{% elif a.alert_type == 'run_out' %}🏃{% else %}⚠️{% endif %}
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+              <span class="badge badge-{{ a.severity }}">{{ a.severity|upper }}</span>
+              {% if a.match_title %}<span class="text-xs text-muted">{{ a.match_title }}</span>{% endif %}
+            </div>
+            <div class="alert-text">{{ a.description }}</div>
+            <div class="alert-time">{{ a.created_at[:16].replace('T',' ') }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="text-align:center;padding:32px;color:var(--text-muted);">
+          <div style="font-size:2rem;margin-bottom:8px;">✅</div>No alerts — all clear!
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><span class="card-title">⚡ Quick Actions</span></div>
+  <div style="display:flex;flex-wrap:wrap;gap:12px;">
+    <button class="btn btn-primary" onclick="document.getElementById('nav-new-match').click()">➕ New Match</button>
+    <a href="/video-analysis" class="btn btn-outline">🎥 Video Analysis</a>
+    <a href="/leaderboard" class="btn btn-outline">🏆 Leaderboard</a>
+    {% for m in matches if m.status == 'live' %}
+    <a href="/match/{{ m.id }}" class="btn btn-outline" style="border-color:var(--red);color:var(--red);">🔴 {{ m.team_a }} vs {{ m.team_b }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const f = btn.dataset.filter;
+      document.querySelectorAll('.match-card').forEach(c => {
+        c.style.display = (f === 'all' || c.dataset.status === f) ? 'block' : 'none';
+      });
+    });
+  });
+</script>
+{% endblock %}

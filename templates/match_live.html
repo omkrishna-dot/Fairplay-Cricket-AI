@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% block title %}{{ match.title }} — FairPlay Cricket AI{% endblock %}
+{% block topbar_title %}🏏 {{ match.title }}{% endblock %}
+{% block topbar_actions %}
+  <span class="badge badge-{{ match.status }}">{{ match.status|upper }}</span>
+  <a href="/match/{{ match.id }}/summary" class="btn btn-sm btn-outline">📊 Summary</a>
+  {% if session.role in ['umpire','organizer'] %}
+  <button class="btn btn-sm btn-primary" onclick="openModal('deliveryModal')">+ Ball</button>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- Scoreboard -->
+<div class="scoreboard" style="margin-bottom:20px;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+    <div>
+      <div style="font-size:0.8rem;color:var(--green-accent);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">1st Innings — {{ match.team_a }}</div>
+      <div class="score-main" id="score-display">{{ score.runs }}/{{ score.wickets }}</div>
+      <div class="score-detail">{{ score.overs }} overs &nbsp;·&nbsp; CRR: <strong id="crr">{% if score.legal_balls > 0 %}{{ "%.2f"|format(score.runs / (score.legal_balls/6)) }}{% else %}0.00{% endif %}</strong></div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px;">2nd Innings — {{ match.team_b }}</div>
+      <div style="font-size:1.8rem;font-weight:800;color:var(--text-secondary);">{{ score2.runs }}/{{ score2.wickets }}</div>
+      <div style="font-size:0.82rem;color:var(--text-muted);">{{ score2.overs }} overs</div>
+    </div>
+  </div>
+
+  <!-- Ball dots -->
+  <div class="over-grid" id="ball-dots">
+    {% for d in score.deliveries[-42:] %}
+    <div class="ball-dot {% if d.is_wicket %}wicket{% elif d.extra_type %}{{ d.extra_type }}{% else %}run-{{ [d.runs, 6]|min }}{% endif %}"
+         title="Over {{ d.over_num+1 }}.{{ d.ball_num }} — {{ d.runs }}{% if d.is_wicket %} W{% endif %}{% if d.extra_type %} ({{ d.extra_type }}){% endif %}">
+      {% if d.is_wicket %}W{% elif d.extra_type == 'wide' %}Wd{% elif d.extra_type == 'noball' %}Nb{% else %}{{ d.runs }}{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="grid-2" style="gap:20px;">
+  <!-- Delivery Log -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📋 Delivery Log</span>
+      <span id="tamper-badge" class="tamper-status tamper-ok" style="font-size:0.72rem;padding:4px 10px;">🔒 Chain OK</span>
+    </div>
+    <div class="table-wrap" style="max-height:380px;overflow-y:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Over</th><th>Batsman</th><th>Bowler</th><th>Runs</th><th>Type</th><th>Hash</th>
+          </tr>
+        </thead>
+        <tbody id="delivery-tbody">
+          {% for d in score.deliveries|reverse %}
+          <tr>
+            <td>{{ d.over_num+1 }}.{{ d.ball_num }}</td>
+            <td>{{ d.batsman or '—' }}</td>
+            <td>{{ d.bowler or '—' }}</td>
+            <td>
+              {% if d.is_wicket %}<span class="badge badge-high">W</span>
+              {% else %}<strong>{{ d.runs }}</strong>{% endif %}
+              {% if d.extras %}<span class="text-xs text-muted">+{{ d.extras }}</span>{% endif %}
+            </td>
+            <td>{% if d.extra_type %}<span class="badge badge-medium">{{ d.extra_type }}</span>{% else %}—{% endif %}</td>
+            <td style="font-family:monospace;font-size:0.65rem;color:var(--text-muted);">{{ (d.entry_hash or '')[:8] }}…</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- AI Alert Feed -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🤖 AI Monitor</span>
+      <span class="badge badge-live" style="font-size:0.65rem;">LIVE</span>
+    </div>
+    <div id="ai-alert-feed" style="max-height:380px;overflow-y:auto;">
+      {% if alerts %}
+        {% for a in alerts %}
+        <div class="alert-item">
+          <div class="alert-icon {{ a.severity }}">
+            {% if a.alert_type == 'no_ball' %}🦶{% elif a.alert_type == 'suspicious_scoring' %}📈{% elif a.alert_type == 'unusual_pattern' %}🔍{% else %}⚠️{% endif %}
+          </div>
+          <div>
+            <div style="display:flex;gap:6px;margin-bottom:3px;">
+              <span class="badge badge-{{ a.severity }}">{{ a.alert_type|replace('_',' ')|upper }}</span>
+            </div>
+            <div class="alert-text">{{ a.description }}</div>
+            <div class="alert-time">{{ a.created_at[:16].replace('T',' ') }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">
+          <div style="font-size:2rem;">✅</div>
+          <div style="margin-top:8px;">No alerts detected</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if session.role in ['umpire','organizer'] %}
+<!-- Match Controls (umpire only) -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-header"><span class="card-title">⚙️ Match Controls</span></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <button class="btn btn-outline btn-sm" onclick="setStatus('live')">▶ Set Live</button>
+    <button class="btn btn-outline btn-sm" onclick="setStatus('completed')">✅ End Match</button>
+    <button class="btn btn-outline btn-sm" onclick="verifyChain()">🔒 Verify Integrity</button>
+    <a href="/match/{{ match.id }}/summary" class="btn btn-outline btn-sm">📊 View Summary</a>
+    <span id="chain-result" style="font-size:0.8rem;color:var(--text-muted);"></span>
+  </div>
+</div>
+{% endif %}
+
+<!-- Add Delivery Modal -->
+<div class="modal-overlay" id="deliveryModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3>🏏 Record Delivery</h3>
+      <button class="modal-close" onclick="closeModal('deliveryModal')">✕</button>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Innings</label>
+        <select id="d-innings"><option value="1">1st Innings</option><option value="2">2nd Innings</option></select>
+      </div>
+      <div class="form-group">
+        <label>Over #</label>
+        <input type="number" id="d-over" min="0" max="49" value="0">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Ball #</label>
+        <input type="number" id="d-ball" min="1" max="8" value="1">
+      </div>
+      <div class="form-group">
+        <label>Runs Scored</label>
+        <input type="number" id="d-runs" min="0" max="7" value="0">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Batsman</label>
+        <input type="text" id="d-batsman" placeholder="Batsman name">
+      </div>
+      <div class="form-group">
+        <label>Bowler</label>
+        <input type="text" id="d-bowler" placeholder="Bowler name">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Extra Type</label>
+        <select id="d-extra">
+          <option value="">None</option>
+          <option value="wide">Wide</option>
+          <option value="noball">No Ball</option>
+          <option value="bye">Bye</option>
+          <option value="legbye">Leg Bye</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Extra Runs</label>
+        <input type="number" id="d-extras" min="0" max="5" value="0">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Wicket?</label>
+        <select id="d-wicket">
+          <option value="0">Not Out</option>
+          <option value="1">Wicket</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Wicket Type</label>
+        <select id="d-wicket-type">
+          <option value="">—</option>
+          <option value="bowled">Bowled</option>
+          <option value="caught">Caught</option>
+          <option value="run_out">Run Out</option>
+          <option value="lbw">LBW</option>
+          <option value="stumped">Stumped</option>
+        </select>
+      </div>
+    </div>
+    <div id="d-error" class="form-error hidden"></div>
+    <div id="d-ai-result" style="display:none;margin-bottom:12px;padding:12px;border-radius:8px;background:rgba(57,211,83,0.05);border:1px solid rgba(57,211,83,0.15);font-size:0.82rem;"></div>
+    <button class="btn btn-primary w-full" onclick="submitDelivery()">Submit Delivery</button>
+  </div>
+</div>
+
+<script>
+const matchId = {{ match.id }};
+
+async function submitDelivery() {
+  const payload = {
+    innings: parseInt(document.getElementById('d-innings').value),
+    over_num: parseInt(document.getElementById('d-over').value),
+    ball_num: parseInt(document.getElementById('d-ball').value),
+    runs: parseInt(document.getElementById('d-runs').value),
+    batsman: document.getElementById('d-batsman').value,
+    bowler: document.getElementById('d-bowler').value,
+    extra_type: document.getElementById('d-extra').value || null,
+    extras: parseInt(document.getElementById('d-extras').value),
+    is_wicket: parseInt(document.getElementById('d-wicket').value),
+    wicket_type: document.getElementById('d-wicket-type').value || null,
+  };
+  const res = await fetch(`/api/matches/${matchId}/deliveries`, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.success) {
+    const aiEl = document.getElementById('d-ai-result');
+    const nb = data.noball_analysis;
+    aiEl.style.display = 'block';
+    aiEl.innerHTML = `<strong>🤖 AI Analysis:</strong> ${nb.verdict} — ${nb.detail} <br>Confidence: <strong>${nb.confidence_pct}%</strong>`;
+    if (data.ai_alerts && data.ai_alerts.length) {
+      aiEl.innerHTML += `<br>⚠️ <strong>Alert:</strong> ${data.ai_alerts[0].description}`;
+      aiEl.style.borderColor = 'rgba(248,81,73,0.3)';
+    }
+    setTimeout(() => { closeModal('deliveryModal'); location.reload(); }, 2000);
+  } else {
+    document.getElementById('d-error').textContent = data.error || 'Error';
+    document.getElementById('d-error').classList.remove('hidden');
+  }
+}
+
+async function verifyChain() {
+  const res = await fetch(`/api/matches/${matchId}/verify`);
+  const data = await res.json();
+  const el = document.getElementById('chain-result');
+  const badge = document.getElementById('tamper-badge');
+  if (data.valid) {
+    el.textContent = `✅ Chain intact — ${data.checked} deliveries verified`;
+    el.style.color = 'var(--green-accent)';
+    badge.textContent = '🔒 Chain OK';
+    badge.className = 'tamper-status tamper-ok';
+  } else {
+    el.textContent = `❌ TAMPER DETECTED at delivery #${data.tampered_at}!`;
+    el.style.color = 'var(--red)';
+    badge.textContent = '⚠️ TAMPERED';
+    badge.className = 'tamper-status tamper-fail';
+  }
+}
+
+async function setStatus(status) {
+  await fetch(`/api/matches/${matchId}/status`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status})
+  });
+  location.reload();
+}
+
+// Auto-refresh alerts every 10s
+setInterval(async () => {
+  const res = await fetch(`/api/matches/${matchId}/alerts`);
+  const alerts = await res.json();
+  if (!alerts.length) return;
+  const feed = document.getElementById('ai-alert-feed');
+  const icons = {no_ball:'🦶', suspicious_scoring:'📈', unusual_pattern:'🔍'};
+  feed.innerHTML = alerts.map(a => `
+    <div class="alert-item">
+      <div class="alert-icon ${a.severity}">${icons[a.alert_type]||'⚠️'}</div>
+      <div>
+        <div style="margin-bottom:3px;"><span class="badge badge-${a.severity}">${a.alert_type.replace(/_/g,' ').toUpperCase()}</span></div>
+        <div class="alert-text">${a.description}</div>
+        <div class="alert-time">${(a.created_at||'').slice(0,16).replace('T',' ')}</div>
+      </div>
+    </div>`).join('');
+}, 10000);
+
+verifyChain();
+</script>
+{% endblock %}

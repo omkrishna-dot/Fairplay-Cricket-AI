@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard — FairPlay Cricket AI{% endblock %}
+{% block topbar_title %}🏆 Leaderboard{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header">
+    <span class="card-title">🏏 Player Rankings</span>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm btn-outline sort-btn active" data-sort="total_runs">Runs</button>
+      <button class="btn btn-sm btn-outline sort-btn" data-sort="total_wickets">Wickets</button>
+      <button class="btn btn-sm btn-outline sort-btn" data-sort="batting_avg">Average</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table id="leaderboard-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Player</th>
+          <th>Team</th>
+          <th>Mat</th>
+          <th>Runs</th>
+          <th>HS</th>
+          <th>Avg</th>
+          <th>Wkts</th>
+          <th>Bowl Avg</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in players %}
+        <tr>
+          <td>
+            {% if loop.index == 1 %}<span class="rank-1" style="font-size:1.2rem;">🥇</span>
+            {% elif loop.index == 2 %}<span class="rank-2" style="font-size:1.2rem;">🥈</span>
+            {% elif loop.index == 3 %}<span class="rank-3" style="font-size:1.2rem;">🥉</span>
+            {% else %}<span class="text-muted">{{ loop.index }}</span>{% endif %}
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div class="avatar" style="width:30px;height:30px;font-size:0.7rem;">{{ p.player_name[:2]|upper }}</div>
+              <strong>{{ p.player_name }}</strong>
+            </div>
+          </td>
+          <td><span class="text-secondary">{{ p.team }}</span></td>
+          <td>{{ p.matches_played }}</td>
+          <td><strong style="color:var(--green-accent);">{{ p.total_runs }}</strong></td>
+          <td>{{ p.highest_score }}</td>
+          <td>{{ "%.1f"|format(p.batting_avg) }}</td>
+          <td>{% if p.total_wickets > 0 %}<strong style="color:var(--blue);">{{ p.total_wickets }}</strong>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          <td>{% if p.bowling_avg > 0 %}{{ "%.1f"|format(p.bowling_avg) }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Top 3 Podium -->
+<div class="card">
+  <div class="card-header"><span class="card-title">🎖️ Top Performers</span></div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    {% for p in players[:3] %}
+    <div style="flex:1;min-width:160px;text-align:center;padding:20px;border-radius:12px;background:var(--dark-bg);border:1px solid var(--dark-border);">
+      <div style="font-size:{% if loop.index==1 %}2.5rem{% elif loop.index==2 %}2rem{% else %}1.6rem{% endif %};margin-bottom:8px;">
+        {% if loop.index==1 %}🥇{% elif loop.index==2 %}🥈{% else %}🥉{% endif %}
+      </div>
+      <div class="avatar" style="margin:0 auto 10px;width:46px;height:46px;font-size:1rem;">{{ p.player_name[:2]|upper }}</div>
+      <div style="font-weight:700;">{{ p.player_name }}</div>
+      <div class="text-sm text-muted">{{ p.team }}</div>
+      <div style="font-size:1.6rem;font-weight:900;color:var(--green-accent);margin-top:8px;">{{ p.total_runs }}</div>
+      <div class="text-xs text-muted">runs</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.sort-btn').forEach(btn => {
+  btn.onclick = async () => {
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const sort = btn.dataset.sort;
+    const res = await fetch('/api/leaderboard');
+    const players = await res.json();
+    players.sort((a,b) => b[sort] - a[sort]);
+    const tbody = document.querySelector('#leaderboard-table tbody');
+    tbody.innerHTML = players.map((p,i) => `
+      <tr>
+        <td>${i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span class="text-muted">${i+1}</span>`}</td>
+        <td><div style="display:flex;align-items:center;gap:10px;">
+          <div class="avatar" style="width:30px;height:30px;font-size:0.7rem;">${p.player_name.slice(0,2).toUpperCase()}</div>
+          <strong>${p.player_name}</strong></div></td>
+        <td><span class="text-secondary">${p.team}</span></td>
+        <td>${p.matches_played}</td>
+        <td><strong style="color:var(--green-accent);">${p.total_runs}</strong></td>
+        <td>${p.highest_score}</td>
+        <td>${p.batting_avg.toFixed(1)}</td>
+        <td>${p.total_wickets > 0 ? `<strong style="color:var(--blue);">${p.total_wickets}</strong>` : '<span class="text-muted">—</span>'}</td>
+        <td>${p.bowling_avg > 0 ? p.bowling_avg.toFixed(1) : '<span class="text-muted">—</span>'}</td>
+      </tr>`).join('');
+  };
+});
+</script>
+{% endblock %}

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up — FairPlay Cricket AI</title>
+  <meta name="description" content="Create your FairPlay Cricket AI account.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div style="width:56px;height:56px;margin:0 auto 14px;font-size:28px;background:linear-gradient(135deg,#1a472a,#39d353);border-radius:14px;display:flex;align-items:center;justify-content:center;">🏏</div>
+      <h1>Create Account</h1>
+      <p>Join FairPlay Cricket AI</p>
+    </div>
+
+    <div id="signup-error" class="form-error hidden"></div>
+
+    <div class="form-group">
+      <label>Your Role</label>
+      <div class="role-selector">
+        <button class="role-btn active" data-role="player">🏃 Player</button>
+        <button class="role-btn" data-role="umpire">👨‍⚖️ Umpire</button>
+        <button class="role-btn" data-role="organizer">📋 Organizer</button>
+      </div>
+    </div>
+    <input type="hidden" id="selected-role" value="player">
+
+    <div class="form-group">
+      <label for="su-username">Username</label>
+      <input type="text" id="su-username" placeholder="Choose a username">
+    </div>
+    <div class="form-group">
+      <label for="su-email">Email (optional)</label>
+      <input type="email" id="su-email" placeholder="your@email.com">
+    </div>
+    <div class="form-group">
+      <label for="su-password">Password</label>
+      <input type="password" id="su-password" placeholder="Min 6 characters">
+    </div>
+    <div class="form-group">
+      <label for="su-confirm">Confirm Password</label>
+      <input type="password" id="su-confirm" placeholder="Repeat password">
+    </div>
+
+    <button class="btn btn-primary w-full" onclick="doSignup()" id="signup-btn">Create Account →</button>
+    <div class="separator"></div>
+    <p style="text-align:center;font-size:0.85rem;">Already have an account? <a href="/login">Sign in</a></p>
+  </div>
+</div>
+<script>
+  document.querySelectorAll('.role-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('selected-role').value = btn.dataset.role;
+    };
+  });
+
+  async function doSignup() {
+    const username = document.getElementById('su-username').value.trim();
+    const email    = document.getElementById('su-email').value.trim();
+    const password = document.getElementById('su-password').value;
+    const confirm  = document.getElementById('su-confirm').value;
+    const role     = document.getElementById('selected-role').value;
+    const errEl    = document.getElementById('signup-error');
+
+    if (!username || !password) { errEl.textContent='Username and password required.'; errEl.classList.remove('hidden'); return; }
+    if (password !== confirm)   { errEl.textContent='Passwords do not match.';         errEl.classList.remove('hidden'); return; }
+    if (password.length < 6)    { errEl.textContent='Password must be at least 6 characters.'; errEl.classList.remove('hidden'); return; }
+    errEl.classList.add('hidden');
+
+    const btn = document.getElementById('signup-btn');
+    btn.textContent = 'Creating…'; btn.disabled = true;
+
+    const res = await fetch('/signup', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username, email, password, role})
+    });
+    const data = await res.json();
+    if (data.success) {
+      window.location.href = '/login';
+    } else {
+      errEl.textContent = data.error || 'Signup failed.';
+      errEl.classList.remove('hidden');
+      btn.textContent = 'Create Account →'; btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>

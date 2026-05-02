@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{{ match.title }} Summary — FairPlay Cricket AI{% endblock %}
+{% block topbar_title %}📊 Match Summary{% endblock %}
+{% block topbar_actions %}
+  <a href="/match/{{ match.id }}" class="btn btn-sm btn-outline">← Live View</a>
+{% endblock %}
+{% block content %}
+
+<!-- Match Header -->
+<div class="scoreboard" style="margin-bottom:20px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div style="font-size:0.8rem;color:var(--green-accent);letter-spacing:1px;text-transform:uppercase;">{{ match.title }}</div>
+      <div style="font-size:1.6rem;font-weight:900;margin-top:4px;">
+        {{ match.team_a }} <span style="color:var(--text-muted);font-weight:400;font-size:1rem;">vs</span> {{ match.team_b }}
+      </div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px;">📍 {{ match.venue or 'Venue TBD' }} &nbsp;·&nbsp; {{ match.overs }} overs</div>
+    </div>
+    {% if match.winner %}
+    <div style="text-align:right;">
+      <div style="font-size:0.75rem;color:var(--text-muted);">RESULT</div>
+      <div style="font-size:1.1rem;font-weight:800;color:var(--green-accent);">🏆 {{ match.winner }} won</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Innings Scores -->
+<div class="grid-2" style="gap:20px;margin-bottom:20px;">
+  <div class="card">
+    <div class="card-header"><span class="card-title">🏏 1st Innings — {{ match.team_a }}</span></div>
+    <div style="font-size:2.5rem;font-weight:900;color:var(--text-primary);">{{ score.runs }}/{{ score.wickets }}</div>
+    <div style="color:var(--text-secondary);font-size:0.9rem;margin-top:4px;">{{ score.overs }} overs</div>
+    {% if score.legal_balls > 0 %}
+    <div style="margin-top:12px;font-size:0.85rem;color:var(--text-muted);">
+      Run Rate: <strong style="color:var(--text-primary);">{{ "%.2f"|format(score.runs / (score.legal_balls/6)) }}</strong>
+    </div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">🏏 2nd Innings — {{ match.team_b }}</span></div>
+    <div style="font-size:2.5rem;font-weight:900;color:var(--text-primary);">{{ score2.runs }}/{{ score2.wickets }}</div>
+    <div style="color:var(--text-secondary);font-size:0.9rem;margin-top:4px;">{{ score2.overs }} overs</div>
+    {% if score2.legal_balls > 0 %}
+    <div style="margin-top:12px;font-size:0.85rem;color:var(--text-muted);">
+      Run Rate: <strong style="color:var(--text-primary);">{{ "%.2f"|format(score2.runs / (score2.legal_balls/6)) }}</strong>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- AI Fairness Report -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header"><span class="card-title">🤖 AI Fairness Report</span></div>
+  <div class="fairness-ring-wrap">
+    <div class="fairness-ring">
+      <svg width="120" height="120" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="50" fill="none" stroke="var(--dark-border)" stroke-width="12"/>
+        <circle cx="60" cy="60" r="50" fill="none"
+          stroke="{% if ai_summary.fairness_score >= 75 %}#39d353{% elif ai_summary.fairness_score >= 50 %}#d29922{% else %}#f85149{% endif %}"
+          stroke-width="12"
+          stroke-dasharray="{{ (ai_summary.fairness_score / 100 * 314.16)|round(1) }} 314.16"
+          stroke-linecap="round"/>
+      </svg>
+      <div class="fairness-ring-label">
+        <div class="fairness-score" style="color:{% if ai_summary.fairness_score >= 75 %}var(--green-accent){% elif ai_summary.fairness_score >= 50 %}var(--orange){% else %}var(--red){% endif %};">
+          {{ ai_summary.fairness_score }}
+        </div>
+        <div class="fairness-grade">Grade {{ ai_summary.fairness_grade }}</div>
+      </div>
+    </div>
+    <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="padding:12px;background:var(--dark-bg);border-radius:8px;">
+        <div style="font-size:1.4rem;font-weight:800;">{{ ai_summary.stats.deliveries_analyzed }}</div>
+        <div class="text-sm text-muted">Deliveries Analyzed</div>
+      </div>
+      <div style="padding:12px;background:var(--dark-bg);border-radius:8px;">
+        <div style="font-size:1.4rem;font-weight:800;color:var(--red);">{{ ai_summary.total_alerts }}</div>
+        <div class="text-sm text-muted">Total Alerts</div>
+      </div>
+      <div style="padding:12px;background:var(--dark-bg);border-radius:8px;">
+        <div style="font-size:1.4rem;font-weight:800;">{{ ai_summary.stats.no_balls }}</div>
+        <div class="text-sm text-muted">No Balls</div>
+      </div>
+      <div style="padding:12px;background:var(--dark-bg);border-radius:8px;">
+        <div style="font-size:1.4rem;font-weight:800;">{{ ai_summary.stats.wides }}</div>
+        <div class="text-sm text-muted">Wides</div>
+      </div>
+    </div>
+  </div>
+
+  {% if ai_summary.alerts %}
+  <div style="margin-top:20px;">
+    <div style="font-size:0.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Detected Issues</div>
+    {% for alert in ai_summary.alerts %}
+    <div class="alert-item">
+      <div class="alert-icon {{ alert.severity }}">⚠️</div>
+      <div>
+        <span class="badge badge-{{ alert.severity }}">{{ alert.severity|upper }}</span>
+        <div class="alert-text">{{ alert.description }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Tamper Detection -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header"><span class="card-title">🔒 Score Integrity Verification</span></div>
+  <div class="tamper-status {{ 'tamper-ok' if chain_result.valid else 'tamper-fail' }}">
+    {% if chain_result.valid %}
+    🔒 Hash chain intact — {{ chain_result.checked }} deliveries verified. No tampering detected.
+    {% else %}
+    ⚠️ TAMPERING DETECTED at delivery #{{ chain_result.tampered_at }}! Data integrity compromised.
+    {% endif %}
+  </div>
+  <div style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);">
+    Each delivery is cryptographically linked to the previous using SHA-256 hashing. Any retroactive modification invalidates the chain.
+  </div>
+</div>
+
+<!-- Delivery History -->
+{% if score.deliveries %}
+<div class="card">
+  <div class="card-header"><span class="card-title">📋 Full Delivery Log (1st Innings)</span></div>
+  <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
+    <table>
+      <thead><tr><th>Over</th><th>Ball</th><th>Batsman</th><th>Bowler</th><th>Runs</th><th>Extra</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for d in score.deliveries %}
+        <tr>
+          <td>{{ d.over_num + 1 }}</td>
+          <td>{{ d.ball_num }}</td>
+          <td>{{ d.batsman or '—' }}</td>
+          <td>{{ d.bowler or '—' }}</td>
+          <td><strong>{{ d.runs }}</strong></td>
+          <td>{% if d.extra_type %}<span class="badge badge-medium">{{ d.extra_type }}</span>{% else %}—{% endif %}</td>
+          <td>{% if d.is_wicket %}<span class="badge badge-high">WICKET</span>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

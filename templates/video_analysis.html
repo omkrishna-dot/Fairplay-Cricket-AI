@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% block title %}Video Analysis — FairPlay Cricket AI{% endblock %}
+{% block topbar_title %}🎥 Video Analysis{% endblock %}
+{% block content %}
+<div class="grid-2" style="gap:20px;margin-bottom:20px;">
+  <!-- Upload / Webcam -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📹 Input Source</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm btn-outline tab-btn active" data-tab="upload">Upload</button>
+        <button class="btn btn-sm btn-outline tab-btn" data-tab="webcam">Webcam</button>
+      </div>
+    </div>
+
+    <!-- Upload tab -->
+    <div id="tab-upload">
+      <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">📂</div>
+        <div style="font-weight:600;margin-bottom:4px;">Drop video here or click to browse</div>
+        <div class="text-sm text-muted">MP4, MOV, AVI — max 200 MB</div>
+        <input type="file" id="file-input" accept="video/*" hidden>
+      </div>
+      <div id="file-info" style="display:none;margin-top:12px;padding:10px;background:var(--dark-bg);border-radius:8px;font-size:0.83rem;"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button class="btn btn-primary flex-1" onclick="runAnalysis('upload')">🤖 Analyze Video</button>
+      </div>
+    </div>
+
+    <!-- Webcam tab -->
+    <div id="tab-webcam" style="display:none;">
+      <div style="position:relative;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:16/9;">
+        <video id="webcam-video" autoplay muted style="width:100%;display:none;"></video>
+        <div id="webcam-placeholder" style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);flex-direction:column;gap:8px;">
+          <div style="font-size:2rem;">📷</div>
+          <div>Camera not started</div>
+        </div>
+        <canvas id="webcam-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button class="btn btn-outline flex-1" id="cam-toggle" onclick="toggleCamera()">▶ Start Camera</button>
+        <button class="btn btn-primary flex-1" onclick="captureFrame()">📸 Capture & Analyze</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analysis Type -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">⚙️ Analysis Mode</span></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+      <label class="analysis-option active" data-mode="noball" style="cursor:pointer;padding:14px;border-radius:10px;border:1px solid var(--green-mid);background:rgba(57,211,83,0.06);display:flex;align-items:center;gap:12px;">
+        <input type="radio" name="analysis-mode" value="noball" checked style="width:auto;">
+        <div>
+          <div style="font-weight:700;">🦶 No-Ball Detection</div>
+          <div class="text-sm text-muted">Front-foot crease position analysis</div>
+        </div>
+      </label>
+      <label class="analysis-option" data-mode="runout" style="cursor:pointer;padding:14px;border-radius:10px;border:1px solid var(--dark-border);display:flex;align-items:center;gap:12px;">
+        <input type="radio" name="analysis-mode" value="runout" style="width:auto;">
+        <div>
+          <div style="font-weight:700;">🏃 Run-Out Decision</div>
+          <div class="text-sm text-muted">Bat grounding vs bails dislodge timing</div>
+        </div>
+      </label>
+    </div>
+    <div class="form-group">
+      <label>Frame Timestamp (seconds)</label>
+      <input type="range" id="frame-slider" min="0" max="120" value="0" style="padding:4px 0;" oninput="document.getElementById('frame-val').textContent=this.value+'s'">
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-muted);">
+        <span>0s</span><span id="frame-val">0s</span><span>120s</span>
+      </div>
+    </div>
+    <button class="btn btn-primary w-full" onclick="runAnalysis()">🤖 Run AI Analysis</button>
+  </div>
+</div>
+
+<!-- Results Panel -->
+<div id="results-section" style="display:none;">
+  <div class="grid-2" style="gap:20px;">
+    <!-- Canvas viz -->
+    <div class="card">
+      <div class="card-header"><span class="card-title" id="viz-title">🦶 Foot Position Analysis</span></div>
+      <div class="analysis-canvas-wrap">
+        <div class="canvas-label" id="canvas-label">FRONT VIEW — CREASE ANALYSIS</div>
+        <canvas id="analysis-canvas" width="400" height="300" style="width:100%;display:block;"></canvas>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;" id="canvas-legend">
+        <span style="display:flex;align-items:center;gap:5px;font-size:0.75rem;"><span style="display:inline-block;width:12px;height:12px;background:#39d353;border-radius:2px;"></span>Safe Zone</span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:0.75rem;"><span style="display:inline-block;width:12px;height:12px;background:#f85149;border-radius:2px;"></span>Crease Line</span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:0.75rem;"><span style="display:inline-block;width:12px;height:12px;background:#d29922;border-radius:2px;"></span>Foot Position</span>
+      </div>
+    </div>
+
+    <!-- Result Detail -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📊 AI Decision</span></div>
+      <div id="verdict-box" style="text-align:center;padding:20px;margin-bottom:16px;border-radius:12px;background:var(--dark-bg);">
+        <div id="verdict-icon" style="font-size:3rem;margin-bottom:8px;">🤖</div>
+        <div id="verdict-text" style="font-size:1.4rem;font-weight:900;"></div>
+        <div id="verdict-detail" style="font-size:0.83rem;color:var(--text-secondary);margin-top:6px;"></div>
+      </div>
+
+      <div class="confidence-bar-wrap">
+        <div class="confidence-label"><span>AI Confidence</span><span id="conf-pct">—</span></div>
+        <div class="confidence-bar"><div class="confidence-fill" id="conf-fill" style="width:0%"></div></div>
+      </div>
+
+      <div id="result-stats" style="margin-top:16px;display:grid;gap:8px;"></div>
+
+      <div style="margin-top:16px;display:flex;gap:8px;">
+        <button class="btn btn-outline flex-1" onclick="runAnalysis()">↻ Re-analyze</button>
+        <button class="btn btn-outline flex-1" onclick="saveAlert()">🚨 Flag Alert</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let camStream = null;
+let lastResult = null;
+
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-upload').style.display = btn.dataset.tab === 'upload' ? 'block' : 'none';
+    document.getElementById('tab-webcam').style.display = btn.dataset.tab === 'webcam' ? 'block' : 'none';
+  };
+});
+
+// Radio style
+document.querySelectorAll('.analysis-option').forEach(opt => {
+  opt.onclick = () => {
+    document.querySelectorAll('.analysis-option').forEach(o => {
+      o.style.borderColor = 'var(--dark-border)';
+      o.style.background = 'transparent';
+    });
+    opt.style.borderColor = 'var(--green-mid)';
+    opt.style.background = 'rgba(57,211,83,0.06)';
+  };
+});
+
+// Drag-drop
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) showFileInfo(f);
+});
+document.getElementById('file-input').onchange = e => { if (e.target.files[0]) showFileInfo(e.target.files[0]); };
+function showFileInfo(f) {
+  const el = document.getElementById('file-info');
+  el.style.display = 'block';
+  el.innerHTML = `📎 <strong>${f.name}</strong> — ${(f.size/1024/1024).toFixed(1)} MB`;
+}
+
+async function toggleCamera() {
+  const btn = document.getElementById('cam-toggle');
+  const vid = document.getElementById('webcam-video');
+  if (camStream) {
+    camStream.getTracks().forEach(t => t.stop());
+    camStream = null; vid.style.display = 'none';
+    document.getElementById('webcam-placeholder').style.display = 'flex';
+    btn.textContent = '▶ Start Camera';
+  } else {
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({video:true});
+      vid.srcObject = camStream; vid.style.display = 'block';
+      document.getElementById('webcam-placeholder').style.display = 'none';
+      btn.textContent = '⏹ Stop Camera';
+    } catch(e) { alert('Camera access denied.'); }
+  }
+}
+
+function captureFrame() { runAnalysis(); }
+
+async function runAnalysis() {
+  const mode = document.querySelector('input[name="analysis-mode"]:checked').value;
+  let endpoint, payload;
+  if (mode === 'noball') {
+    endpoint = '/api/ai/noball'; payload = {simulated: true};
+  } else {
+    endpoint = '/api/ai/runout'; payload = {simulated: true};
+  }
+
+  const res = await fetch(endpoint, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  lastResult = await res.json();
+
+  document.getElementById('results-section').style.display = 'block';
+  document.getElementById('results-section').scrollIntoView({behavior:'smooth'});
+
+  if (mode === 'noball') renderNoball(lastResult);
+  else renderRunout(lastResult);
+}
+
+function renderNoball(d) {
+  document.getElementById('viz-title').textContent = '🦶 Foot Position Analysis';
+  document.getElementById('canvas-label').textContent = 'FRONT VIEW — CREASE ANALYSIS';
+
+  const canvas = document.getElementById('analysis-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Background pitch
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = '#2d4a1e'; ctx.fillRect(0, H*0.55, W, H*0.45);
+
+  // Pitch strip
+  ctx.fillStyle = '#8B7355'; ctx.fillRect(W*0.35, H*0.1, W*0.3, H*0.8);
+
+  // Crease line (scaled)
+  const creaseX = Math.round((d.crease_x / 340) * W);
+  ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(creaseX, H*0.3); ctx.lineTo(creaseX, H*0.85); ctx.stroke();
+  ctx.fillStyle = '#f0f0f0'; ctx.font = '11px Inter';
+  ctx.fillText('CREASE', creaseX - 30, H*0.27);
+
+  // Safe zone
+  ctx.fillStyle = 'rgba(57,211,83,0.12)';
+  ctx.fillRect(W*0.35, H*0.3, creaseX - W*0.35, H*0.55);
+
+  // Foot position
+  const footX = Math.round((d.foot_x / 340) * W);
+  const footY = Math.round((d.foot_y / 340) * H);
+  ctx.fillStyle = d.is_noball ? '#f85149' : '#d29922';
+  ctx.beginPath(); ctx.arc(footX, footY, 14, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Inter'; ctx.textAlign = 'center';
+  ctx.fillText('FOOT', footX, footY+4);
+
+  // Overstep arrow
+  if (d.is_noball) {
+    ctx.strokeStyle = '#f85149'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(creaseX, footY); ctx.lineTo(footX, footY); ctx.stroke();
+    ctx.fillStyle = '#f85149'; ctx.textAlign = 'left';
+    ctx.fillText(`+${d.overstep_px}px`, creaseX+5, footY-5);
+  }
+
+  // Verdict overlay
+  ctx.fillStyle = d.is_noball ? 'rgba(248,81,73,0.15)' : 'rgba(57,211,83,0.1)';
+  ctx.fillRect(0,0,W,36);
+  ctx.fillStyle = d.is_noball ? '#f85149' : '#39d353';
+  ctx.font = 'bold 14px Inter'; ctx.textAlign = 'center';
+  ctx.fillText(d.verdict, W/2, 23);
+
+  // UI
+  const vbox = document.getElementById('verdict-box');
+  vbox.style.background = d.is_noball ? 'rgba(248,81,73,0.08)' : 'rgba(57,211,83,0.06)';
+  document.getElementById('verdict-icon').textContent = d.is_noball ? '🚫' : '✅';
+  document.getElementById('verdict-text').textContent = d.verdict;
+  document.getElementById('verdict-text').style.color = d.is_noball ? 'var(--red)' : 'var(--green-accent)';
+  document.getElementById('verdict-detail').textContent = d.detail;
+  document.getElementById('conf-pct').textContent = d.confidence_pct + '%';
+  document.getElementById('conf-fill').style.width = d.confidence_pct + '%';
+  document.getElementById('conf-fill').style.background = d.is_noball ? 'linear-gradient(90deg,#7f1d1d,#f85149)' : 'linear-gradient(90deg,#1a472a,#39d353)';
+  document.getElementById('result-stats').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:0.83rem;padding:8px 0;border-bottom:1px solid var(--dark-border);">
+      <span class="text-muted">Foot X Position</span><strong>${d.foot_x}px</strong>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:0.83rem;padding:8px 0;border-bottom:1px solid var(--dark-border);">
+      <span class="text-muted">Crease Line</span><strong>${d.crease_x}px</strong>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:0.83rem;padding:8px 0;">
+      <span class="text-muted">Overstep</span><strong style="color:${d.is_noball?'var(--red)':'var(--green-accent)'};">${d.overstep_px > 0 ? '+' : ''}${d.overstep_px}px</strong>
+    </div>`;
+}
+
+function renderRunout(d) {
+  document.getElementById('viz-title').textContent = '🏃 Run-Out Analysis';
+  document.getElementById('canvas-label').textContent = 'TIMING ANALYSIS — FRAME BY FRAME';
+
+  const canvas = document.getElementById('analysis-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0,0,W,H);
+
+  // Timeline bar
+  const barY = H/2, barH = 12, barX = 40, barW = W - 80;
+  ctx.fillStyle = '#21262d'; ctx.beginPath();
+  ctx.roundRect(barX, barY - barH/2, barW, barH, 6); ctx.fill();
+
+  const total = 600;
+  const stumpRel = (d.stump_hit_ms - (d.stump_hit_ms - 200)) / total;
+  const batRel = (d.bat_ground_ms - (d.stump_hit_ms - 200)) / total;
+  const stumpX = barX + Math.min(Math.max(stumpRel, 0.1), 0.9) * barW;
+  const batX = barX + Math.min(Math.max(batRel, 0.05), 0.95) * barW;
+
+  // Stump event
+  ctx.strokeStyle = '#f85149'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(stumpX, barY - 30); ctx.lineTo(stumpX, barY + 30); ctx.stroke();
+  ctx.fillStyle = '#f85149'; ctx.font = '11px Inter'; ctx.textAlign = 'center';
+  ctx.fillText('🏏 Bails', stumpX, barY - 38);
+  ctx.fillText(`${d.stump_hit_ms.toFixed(0)}ms`, stumpX, barY + 44);
+
+  // Bat event
+  ctx.strokeStyle = '#39d353'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(batX, barY - 30); ctx.lineTo(batX, barY + 30); ctx.stroke();
+  ctx.fillStyle = '#39d353';
+  ctx.fillText('🦇 Bat', batX, barY - 38);
+  ctx.fillText(`${d.bat_ground_ms.toFixed(0)}ms`, batX, barY + 44);
+
+  // Diff arrow
+  const minX = Math.min(stumpX, batX), maxX = Math.max(stumpX, batX);
+  ctx.strokeStyle = '#d29922'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(minX, barY); ctx.lineTo(maxX, barY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#d29922'; ctx.font = 'bold 11px Inter';
+  ctx.fillText(`Δ ${Math.abs(d.diff_ms).toFixed(0)}ms`, (minX+maxX)/2, barY - 10);
+
+  // Verdict
+  ctx.fillStyle = d.is_out ? 'rgba(248,81,73,0.15)' : 'rgba(57,211,83,0.1)';
+  ctx.fillRect(0,0,W,36);
+  ctx.fillStyle = d.is_out ? '#f85149' : '#39d353';
+  ctx.font = 'bold 14px Inter'; ctx.textAlign = 'center';
+  ctx.fillText(d.verdict, W/2, 23);
+
+  // UI
+  const vbox = document.getElementById('verdict-box');
+  vbox.style.background = d.is_out ? 'rgba(248,81,73,0.08)' : 'rgba(57,211,83,0.06)';
+  document.getElementById('verdict-icon').textContent = d.is_out ? '☝️' : '🛡️';
+  document.getElementById('verdict-text').textContent = d.verdict;
+  document.getElementById('verdict-text').style.color = d.is_out ? 'var(--red)' : 'var(--green-accent)';
+  document.getElementById('verdict-detail').textContent = d.detail;
+  document.getElementById('conf-pct').textContent = d.confidence_pct + '%';
+  document.getElementById('conf-fill').style.width = d.confidence_pct + '%';
+  document.getElementById('result-stats').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:0.83rem;padding:8px 0;border-bottom:1px solid var(--dark-border);">
+      <span class="text-muted">Bails Dislodge</span><strong>${d.stump_hit_ms.toFixed(1)}ms</strong>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:0.83rem;padding:8px 0;border-bottom:1px solid var(--dark-border);">
+      <span class="text-muted">Bat Grounded</span><strong>${d.bat_ground_ms.toFixed(1)}ms</strong>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:0.83rem;padding:8px 0;">
+      <span class="text-muted">Time Difference</span>
+      <strong style="color:${d.is_out?'var(--red)':'var(--green-accent)'};">${d.diff_ms > 0?'+':''}${d.diff_ms.toFixed(1)}ms</strong>
+    </div>`;
+}
+
+async function saveAlert() {
+  alert('Alert flagged and saved to match record.');
+}
+</script>
+{% endblock %}

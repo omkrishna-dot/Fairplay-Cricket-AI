@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — FairPlay Cricket AI</title>
+  <meta name="description" content="Sign in to FairPlay Cricket AI — AI-powered cricket fairness platform.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div style="width:56px;height:56px;margin:0 auto 14px;font-size:28px;background:linear-gradient(135deg,#1a472a,#39d353);border-radius:14px;display:flex;align-items:center;justify-content:center;">🏏</div>
+      <h1>FairPlay Cricket AI</h1>
+      <p>Sign in to your account</p>
+    </div>
+
+    {% if error %}<div class="form-error">{{ error }}</div>{% endif %}
+    <div id="login-error" class="form-error hidden"></div>
+
+    <div class="form-group">
+      <label for="username">Username</label>
+      <input type="text" id="username" placeholder="Enter your username" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="Enter your password" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary w-full" style="margin-top:8px;" id="login-btn" onclick="doLogin()">
+      Sign In →
+    </button>
+
+    <div class="separator"></div>
+    <p style="text-align:center;font-size:0.85rem;">Don't have an account? <a href="/signup">Sign up</a></p>
+
+    <div style="margin-top:20px;background:rgba(57,211,83,0.05);border:1px solid rgba(57,211,83,0.15);border-radius:10px;padding:14px;">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--green-accent);margin-bottom:8px;letter-spacing:1px;">DEMO CREDENTIALS — click to fill</div>
+      <div style="display:grid;gap:6px;">
+        <div class="demo-cred" data-user="admin" data-pass="admin123" style="cursor:pointer;padding:7px 10px;border-radius:6px;background:var(--dark-bg);font-size:0.8rem;transition:background .2s;">
+          <span style="color:var(--text-muted);">Organizer:</span> <strong>admin</strong> / admin123
+        </div>
+        <div class="demo-cred" data-user="umpire_raj" data-pass="umpire123" style="cursor:pointer;padding:7px 10px;border-radius:6px;background:var(--dark-bg);font-size:0.8rem;transition:background .2s;">
+          <span style="color:var(--text-muted);">Umpire:</span> <strong>umpire_raj</strong> / umpire123
+        </div>
+        <div class="demo-cred" data-user="virat_k" data-pass="player123" style="cursor:pointer;padding:7px 10px;border-radius:6px;background:var(--dark-bg);font-size:0.8rem;transition:background .2s;">
+          <span style="color:var(--text-muted);">Player:</span> <strong>virat_k</strong> / player123
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.querySelectorAll('.demo-cred').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById('username').value = el.dataset.user;
+      document.getElementById('password').value = el.dataset.pass;
+      el.style.background = 'rgba(57,211,83,0.1)';
+      setTimeout(() => el.style.background = 'var(--dark-bg)', 700);
+    });
+  });
+
+  async function doLogin() {
+    const btn = document.getElementById('login-btn');
+    const errEl = document.getElementById('login-error');
+    btn.textContent = 'Signing in…'; btn.disabled = true;
+    errEl.classList.add('hidden');
+    const res = await fetch('/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      window.location.href = data.redirect || '/dashboard';
+    } else {
+      errEl.textContent = data.error || 'Invalid credentials';
+      errEl.classList.remove('hidden');
+      btn.textContent = 'Sign In →'; btn.disabled = false;
+    }
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>

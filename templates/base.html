@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}FairPlay Cricket AI{% endblock %}</title>
+  <meta name="description" content="AI-powered cricket fairness platform — tamper-proof scoring, no-ball detection, and run-out analysis.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+{% block body %}
+<div class="app-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🏏</div>
+      <div>
+        <div class="logo-text">FairPlay</div>
+        <div class="logo-sub">Cricket AI</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+      <a href="/dashboard" class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}">
+        <span class="icon">📊</span> Dashboard
+      </a>
+      <a href="/leaderboard" class="nav-link {% if request.endpoint=='leaderboard' %}active{% endif %}">
+        <span class="icon">🏆</span> Leaderboard
+      </a>
+
+      <div class="nav-section-label">Match Tools</div>
+      <a href="#" class="nav-link" id="nav-new-match">
+        <span class="icon">➕</span> New Match
+      </a>
+      <a href="/video-analysis" class="nav-link {% if request.endpoint=='video_analysis' %}active{% endif %}">
+        <span class="icon">🎥</span> Video Analysis
+      </a>
+
+      {% if session.role in ['umpire','organizer'] %}
+      <div class="nav-section-label">Admin</div>
+      <a href="#" class="nav-link">
+        <span class="icon">⚠️</span> Alert Center
+        <span class="nav-badge" id="alert-count">—</span>
+      </a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-user">
+      <div class="avatar">{{ session.avatar or '??' }}</div>
+      <div class="user-info">
+        <div class="user-name">{{ session.username or 'Guest' }}</div>
+        <div class="user-role">{{ session.role or 'player' }}</div>
+      </div>
+      <a href="/logout" title="Logout" style="color:var(--text-muted);font-size:1.1rem;margin-left:4px;">↩</a>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-content">
+    <header class="topbar">
+      <button class="topbar-btn btn-icon" id="menu-toggle" style="display:none">☰</button>
+      <span class="topbar-title">{% block topbar_title %}FairPlay Cricket AI{% endblock %}</span>
+      {% block topbar_actions %}{% endblock %}
+    </header>
+    <main class="page-body">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<!-- New Match Modal -->
+<div class="modal-overlay" id="newMatchModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🏏 Create New Match</h3>
+      <button class="modal-close" onclick="closeModal('newMatchModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Match Title</label>
+      <input type="text" id="nm-title" placeholder="e.g. T20 League Final">
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Team A</label>
+        <input type="text" id="nm-team-a" placeholder="Team Alpha">
+      </div>
+      <div class="form-group">
+        <label>Team B</label>
+        <input type="text" id="nm-team-b" placeholder="Team Beta">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Venue</label>
+        <input type="text" id="nm-venue" placeholder="Stadium name">
+      </div>
+      <div class="form-group">
+        <label>Overs</label>
+        <select id="nm-overs">
+          <option value="5">5 overs</option>
+          <option value="10">10 overs</option>
+          <option value="15">15 overs</option>
+          <option value="20" selected>20 overs (T20)</option>
+          <option value="50">50 overs (ODI)</option>
+        </select>
+      </div>
+    </div>
+    <div id="nm-error" class="form-error hidden"></div>
+    <button class="btn btn-primary w-full" onclick="createMatch()">Create Match</button>
+  </div>
+</div>
+
+<script>
+  // Mobile menu
+  const menuBtn = document.getElementById('menu-toggle');
+  const sidebar = document.getElementById('sidebar');
+  if (menuBtn) {
+    menuBtn.style.display = '';
+    menuBtn.onclick = () => sidebar.classList.toggle('open');
+  }
+  if (window.innerWidth <= 900) {
+    document.getElementById('menu-toggle').style.display = 'flex';
+  }
+
+  // New match modal
+  document.getElementById('nav-new-match').onclick = (e) => {
+    e.preventDefault();
+    openModal('newMatchModal');
+  };
+
+  function openModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+  async function createMatch() {
+    const title = document.getElementById('nm-title').value.trim();
+    const teamA = document.getElementById('nm-team-a').value.trim();
+    const teamB = document.getElementById('nm-team-b').value.trim();
+    const venue = document.getElementById('nm-venue').value.trim();
+    const overs = document.getElementById('nm-overs').value;
+    const errEl = document.getElementById('nm-error');
+
+    if (!title || !teamA || !teamB) {
+      errEl.textContent = 'Title, Team A and Team B are required.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    errEl.classList.add('hidden');
+
+    const res = await fetch('/api/matches', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({title, team_a: teamA, team_b: teamB, venue, overs: parseInt(overs)})
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeModal('newMatchModal');
+      window.location.href = '/match/' + data.match_id;
+    } else {
+      errEl.textContent = data.error || 'Failed to create match.';
+      errEl.classList.remove('hidden');
+    }
+  }
+
+  // Alert count
+  fetch('/api/alerts').then(r=>r.json()).then(alerts=>{
+    const el = document.getElementById('alert-count');
+    if (el) {
+      const unresolved = alerts.filter(a=>!a.resolved).length;
+      el.textContent = unresolved || '0';
+    }
+  }).catch(()=>{});
+</script>
+{% endblock %}
+</body>
+</html>
